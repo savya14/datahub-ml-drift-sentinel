@@ -1,0 +1,16 @@
+# Core
+pandas>=2.0
+numpy>=1.24
+scipy>=1.10
+pytest>=7.4
+
+# DataHub
+acryl-datahub>=0.14.0
+
+# Backend API (Phase 3-4)
+fastapi>=0.110
+uvicorn[standard]>=0.29
+
+# MCP client (verify exact package name/version once you've connected
+# an MCP client in Phase 0 -- do not assume this is correct without checking)
+mcp>=1.0
