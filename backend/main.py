@@ -21,13 +21,24 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="DataHub ML Drift Sentinel API")
 
-# Allow CORS for Next.js frontend
+# Allow CORS for Next.js frontend (local dev + deployed Vercel origin)
+# Set ALLOWED_ORIGINS as a comma-separated list in production,
+# e.g. "https://datahub-ml-drift-sentinel.vercel.app,http://localhost:3000"
+_allowed_origins = os.environ.get(
+    "ALLOWED_ORIGINS", "*"
+)
+cors_origins = (
+    ["*"] if _allowed_origins == "*"
+    else [o.strip() for o in _allowed_origins.split(",")]
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust in production
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+
 )
 
 # ---------------------------------------------------------------------------
