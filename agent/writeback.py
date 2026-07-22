@@ -73,12 +73,60 @@ def write_structured_properties(report: ModelAuditReport) -> None:
     emitter = _get_emitter()
 
     # Collect unique entity URNs to tag.
-    # Always tag the feature dataset (source_entity_urn) with the worst-case.
+    # Always tag the feature dataset (source_entity_urn) with the worst-case overall.
     entities_to_tag: dict[str, FeatureRiskResult] = {}
+
+    if not report.feature_results:
+        return
 
     worst_result = max(report.feature_results, key=lambda r: r.psi)
     feature_urn = report.feature_results[0].source_entity_urn
+    # The overall risk for the feature dataset should match the report's overall risk
+    worst_result.risk_level = report.overall_risk
     entities_to_tag[feature_urn] = worst_result
+
+    feature_to_raw = {
+        # churn_model features
+        "avg_transaction_amount": "raw_transactions",
+        "transaction_count_30d": "raw_transactions",
+        "refund_rate": "raw_transactions",
+        "signup_channel": "raw_customer_profile",
+        "account_age_days": "raw_customer_profile",
+        "region": "raw_customer_profile",
+        "support_ticket_count_30d": "raw_support_tickets",
+        "avg_resolution_time": "raw_support_tickets",
+        # fraud_model features
+        "payment_amount": "raw_payments",
+        "tx_frequency_1h": "raw_payments",
+        "device_trust_score": "raw_user_devices",
+        "failed_login_attempts": "raw_user_devices",
+        "ip_risk_score": "raw_ip_blacklist",
+        "is_vpn": "raw_ip_blacklist"
+    }
+
+    # "urn:li:dataset:(urn:li:dataPlatform:custom,churn_features,PROD)"
+    parts = feature_urn.split(",")
+    if len(parts) >= 3:
+        platform = parts[0].split("(")[1]
+        env = parts[2].strip(")")
+    else:
+        platform = "urn:li:dataPlatform:custom"
+        env = "PROD"
+
+    # Find the worst drifted feature for each raw table
+    raw_table_worst_result: dict[str, FeatureRiskResult] = {}
+    for feature_result in report.feature_results:
+        if feature_result.risk_level in ("MEDIUM", "HIGH"):
+            raw_table_name = feature_to_raw.get(feature_result.feature_name)
+            if raw_table_name:
+                if raw_table_name not in raw_table_worst_result:
+                    raw_table_worst_result[raw_table_name] = feature_result
+                elif feature_result.psi > raw_table_worst_result[raw_table_name].psi:
+                    raw_table_worst_result[raw_table_name] = feature_result
+
+    for raw_table_name, worst_feat_result in raw_table_worst_result.items():
+        raw_table_urn = f"urn:li:dataset:({platform},{raw_table_name},{env})"
+        entities_to_tag[raw_table_urn] = worst_feat_result
 
     for entity_urn, result in entities_to_tag.items():
         mcp = MetadataChangeProposalWrapper(
@@ -91,7 +139,7 @@ def write_structured_properties(report: ModelAuditReport) -> None:
                     ),
                     StructuredPropertyValueAssignmentClass(
                         propertyUrn=PROP_RISK,
-                        values=[report.overall_risk],
+                        values=[result.risk_level],
                     ),
                     StructuredPropertyValueAssignmentClass(
                         propertyUrn=PROP_TIMESTAMP,
@@ -225,7 +273,15 @@ if __name__ == "__main__":
         report = ModelAuditReport(
             model_urn=data["model_urn"],
             timestamp=data["timestamp"],
-            feature_results=[FeatureRiskResult(**fr) for fr in data["feature_results"]],
+            feature_results=[FeatureRiskResult(
+                feature_name=fr["feature_name"],
+                source_entity_urn=fr["source_entity_urn"],
+                psi=fr["psi"],
+                ks_pvalue=fr.get("ks_pvalue"),
+                risk_level=fr["risk_level"],
+                baseline_distribution=fr.get("baseline_distribution", []),
+                current_distribution=fr.get("current_distribution", []),
+            ) for fr in data["feature_results"]],
             overall_risk=data["overall_risk"],
             top_contributing_feature=data["top_contributing_feature"],
         )

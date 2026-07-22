@@ -38,6 +38,10 @@ class FeatureRiskResult:
     psi: float
     ks_pvalue: float | None
     risk_level: str  # LOW / MEDIUM / HIGH
+    baseline_distribution: list[float]
+    current_distribution: list[float]
+    null_rate: float | None = None
+    recommendation: str | None = None
 
 
 @dataclass
@@ -58,14 +62,27 @@ def run_audit(model_name: str) -> ModelAuditReport:
     """Run a full drift audit for the given model and return a ModelAuditReport."""
     model_urn = f"urn:li:mlModel:(urn:li:dataPlatform:custom,{model_name},PROD)"
 
-    # 1. Walk lineage
-    feature_dataset = "urn:li:dataset:(urn:li:dataPlatform:custom,churn_features,PROD)"
-    target_urns = [
-        feature_dataset,
-        "urn:li:dataset:(urn:li:dataPlatform:custom,raw_transactions,PROD)",
-        "urn:li:dataset:(urn:li:dataPlatform:custom,raw_customer_profile,PROD)",
-        "urn:li:dataset:(urn:li:dataPlatform:custom,raw_support_tickets,PROD)",
-    ]
+    # 1. Walk lineage and set feature CSV paths per model
+    if model_name == "fraud_model":
+        feature_dataset = "urn:li:dataset:(urn:li:dataPlatform:custom,fraud_features,PROD)"
+        target_urns = [
+            feature_dataset,
+            "urn:li:dataset:(urn:li:dataPlatform:custom,raw_payments,PROD)",
+            "urn:li:dataset:(urn:li:dataPlatform:custom,raw_user_devices,PROD)",
+            "urn:li:dataset:(urn:li:dataPlatform:custom,raw_ip_blacklist,PROD)",
+        ]
+        baseline_filename = "fraud_baseline_features.csv"
+        current_filename = "fraud_current_features.csv"
+    else:
+        feature_dataset = "urn:li:dataset:(urn:li:dataPlatform:custom,churn_features,PROD)"
+        target_urns = [
+            feature_dataset,
+            "urn:li:dataset:(urn:li:dataPlatform:custom,raw_transactions,PROD)",
+            "urn:li:dataset:(urn:li:dataPlatform:custom,raw_customer_profile,PROD)",
+            "urn:li:dataset:(urn:li:dataPlatform:custom,raw_support_tickets,PROD)",
+        ]
+        baseline_filename = "baseline_features.csv"
+        current_filename = "current_features.csv"
 
     paths = get_lineage_paths_between(model_urn, target_urns)
 
@@ -83,8 +100,8 @@ def run_audit(model_name: str) -> ModelAuditReport:
 
     # 2. Load feature data
     data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
-    baseline_path = os.path.join(data_dir, "baseline_features.csv")
-    current_path = os.path.join(data_dir, "current_features.csv")
+    baseline_path = os.path.join(data_dir, baseline_filename)
+    current_path = os.path.join(data_dir, current_filename)
 
     if not os.path.exists(baseline_path) or not os.path.exists(current_path):
         raise FileNotFoundError("Baseline or current feature CSVs not found in data/ directory.")
@@ -98,7 +115,10 @@ def run_audit(model_name: str) -> ModelAuditReport:
     # 3. Run drift detection per feature
     feature_results: list[FeatureRiskResult] = []
 
+    from drift_engine.recommendations import get_recommendation
+
     for col in cols_to_test:
+        null_rate = float(current_df[col].isnull().mean())
         if pd.api.types.is_numeric_dtype(baseline_df[col]):
             psi_res = psi_numeric(baseline_df[col], current_df[col], col)
             ks_res = ks_test(baseline_df[col], current_df[col], col)
@@ -108,6 +128,10 @@ def run_audit(model_name: str) -> ModelAuditReport:
                 psi=round(psi_res.psi, 6),
                 ks_pvalue=round(ks_res.p_value, 6),
                 risk_level=psi_res.risk_level,
+                baseline_distribution=psi_res.baseline_dist,
+                current_distribution=psi_res.current_dist,
+                null_rate=round(null_rate, 4),
+                recommendation=get_recommendation(psi_res.psi, ks_res.p_value, null_rate)
             ))
         else:
             psi_res = psi_categorical(baseline_df[col], current_df[col], col)
@@ -117,6 +141,10 @@ def run_audit(model_name: str) -> ModelAuditReport:
                 psi=round(psi_res.psi, 6),
                 ks_pvalue=None,
                 risk_level=psi_res.risk_level,
+                baseline_distribution=psi_res.baseline_dist,
+                current_distribution=psi_res.current_dist,
+                null_rate=round(null_rate, 4),
+                recommendation=get_recommendation(psi_res.psi, None, null_rate)
             ))
 
     # 4. Aggregate

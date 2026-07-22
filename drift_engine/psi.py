@@ -24,6 +24,8 @@ class PSIResult:
     feature_name: str
     psi: float
     risk_level: str  # "LOW" | "MEDIUM" | "HIGH"
+    baseline_dist: list[float]
+    current_dist: list[float]
 
 
 def _classify(psi_value: float) -> str:
@@ -61,12 +63,18 @@ def psi_numeric(baseline: pd.Series, current: pd.Series, feature_name: str, n_bi
     current_pct = current_counts / max(current_counts.sum(), 1)
 
     psi_value = _psi_from_percentages(baseline_pct, current_pct)
-    return PSIResult(feature_name=feature_name, psi=psi_value, risk_level=_classify(psi_value))
+    return PSIResult(
+        feature_name=feature_name,
+        psi=psi_value,
+        risk_level=_classify(psi_value),
+        baseline_dist=baseline_pct.tolist(),
+        current_dist=current_pct.tolist()
+    )
 
 
 def psi_categorical(baseline: pd.Series, current: pd.Series, feature_name: str) -> PSIResult:
     """PSI for a categorical feature. Bins = union of categories seen in either sample."""
-    categories = sorted(set(baseline.unique()) | set(current.unique()))
+    categories = sorted({str(x) for x in set(baseline.unique()) | set(current.unique())})
 
     baseline_counts = baseline.value_counts().reindex(categories, fill_value=0)
     current_counts = current.value_counts().reindex(categories, fill_value=0)
@@ -75,4 +83,10 @@ def psi_categorical(baseline: pd.Series, current: pd.Series, feature_name: str) 
     current_pct = (current_counts / max(current_counts.sum(), 1)).to_numpy()
 
     psi_value = _psi_from_percentages(baseline_pct, current_pct)
-    return PSIResult(feature_name=feature_name, psi=psi_value, risk_level=_classify(psi_value))
+    return PSIResult(
+        feature_name=feature_name,
+        psi=psi_value,
+        risk_level=_classify(psi_value),
+        baseline_dist=baseline_pct.tolist(),
+        current_dist=current_pct.tolist()
+    )

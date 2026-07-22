@@ -7,3 +7,7 @@ frontend/.next/
 frontend/node_modules/
 *.egg-info/
 .pytest_cache/
+test_*.py
+run_cmd.txt
+*.zip
+frontend/.lovable/

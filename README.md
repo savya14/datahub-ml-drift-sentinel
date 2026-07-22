@@ -1,85 +1,110 @@
 # DataHub ML Drift Sentinel
 
-An automated framework for Machine Learning model drift detection, DataHub lineage integration, and incident write-back.
+DataHub ML Drift Sentinel turns DataHub's own governance layer — lineage, structured properties, and native document entities — into the active system of record for ML drift incident response. Rather than relying on a separate observability database, Sentinel resolves model dependencies dynamically using DataHub's GraphQL lineage API, evaluates Population Stability Index (PSI) and Kolmogorov–Smirnov (KS) statistical drift across upstream features, and writes back verifiable audit evidence and structured incident reports directly into DataHub's metadata graph.
 
 Built for the **DataHub AI/ML Agent Hackathon**.
 
-## Overview
-ML Drift Sentinel bridges the gap between Machine Learning drift detection and enterprise metadata management. It walks DataHub lineage to identify the upstream data tables that feed into a specific ML Model, executes statistical drift checks (PSI, KS tests) on those features, and writes the results back directly into DataHub as Structured Properties and Markdown Incident Reports.
-
-**Key Features:**
-- **Lineage-Driven Audits:** Uses the DataHub Python SDK's GraphQL client (`searchAcrossLineage`) to resolve `mlModel` entities to their physical `dataset` origins.
-- **Statistical Drift Engine:** Implements the Population Stability Index (PSI) and Kolmogorov-Smirnov (KS) non-parametric test.
-- **Idempotent Write-Backs:** Emits Structured Properties (`drift_psi_score`, `drift_risk_level`, `last_checked_timestamp`) via the DataHub SDK REST emitter (UPSERT) and links Markdown incident documents to the model natively in DataHub.
-- **Premium UI:** Next.js + FastAPI interface to manually trigger audits and visualize live lineage dependencies dynamically.
+---
 
 ## Architecture
 
 ```mermaid
 graph TD
-    UI[Next.js Frontend] -->|POST /audit| API[FastAPI Backend]
-    API -->|1. GraphQL searchAcrossLineage| GMS[DataHub GMS]
-    GMS -.->|Lineage Map| API
-    
-    API -->|2. Compute PSI/KS| DE[Drift Engine]
-    DE -->|Current vs Baseline CSVs| API
-    
-    API -->|3. Emit via DataHub SDK| GMS
-    
-    API -.->|ModelAuditReport| Report[Model Audit JSON]
+    FE[Frontend: React / Vite] -->|1. POST /audit & /writeback| BE[Backend: FastAPI]
+    BE -->|2. GraphQL searchAcrossLineage| DHG[DataHub GraphQL API]
+    BE -->|3. Compute PSI / KS Stats| DE[Drift Engine]
+    DE -.->|Feature Audit Results| BE
+    BE -->|4. DataHub SDK REST Writeback| DHS[DataHub SDK]
+    DHS -->|5. Structured Properties & Incident Documents| DHSOR[DataHub: System of Record]
 ```
 
-> **Note:** The data analyzed by the drift engine in this repository (`data/baseline_features.csv` and `data/current_features.csv`) is 100% synthetic data generated strictly for demonstration purposes.
+---
 
-## Repository Setup & Usage
+## Setup & Running Instructions
 
-### 1. Prerequisites
-You will need a local DataHub instance running on port 8080 (GMS) and 9002 (Frontend).
+### 1. DataHub Quickstart
+Start a local DataHub instance (requires Docker):
 ```bash
 datahub docker quickstart
 ```
 
-### 2. Environment Setup
-Create a virtual environment and install dependencies:
+### 2. Backend & Seed Environment
+Set up the Python 3.12 environment and install dependencies:
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 3. Seed Metadata
-Execute the setup script to seed DataHub with the synthetic models, datasets, and structured property definitions:
+Seed DataHub with models (`churn_model` and `fraud_model`), dataset lineages, training jobs, and structured property definitions:
 ```bash
 export DATAHUB_GMS_URL="http://localhost:8080"
-export DATAHUB_GMS_TOKEN="<your_personal_access_token>"
+export DATAHUB_GMS_TOKEN=""  # Optional if token auth is enabled
 
 python data/seed_lineage.py
 ```
 
-### 4. Running the Backend & Frontend
-Start the FastAPI wrapper:
+### 3. Run the Backend API
+Start the FastAPI server:
 ```bash
 python backend/main.py
 ```
-Start the Next.js UI:
+*(Runs at `http://localhost:8000`)*
+
+### 4. Run the Frontend App
+In a new terminal window:
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-Navigate to `http://localhost:3000`.
+*(Runs at `http://localhost:3000`)*
 
-## OSS Contribution
+### Port Summary
+| Service | Port | Description |
+|---|---|---|
+| **DataHub GMS** | `8080` | DataHub REST & GraphQL API |
+| **DataHub UI** | `9002` | Native DataHub Web Application |
+| **Backend API** | `8000` | FastAPI Sentinel Server |
+| **Frontend UI** | `3000` | React / Vite Dashboard |
 
-This project includes a formalized DataHub Skill contribution located in `skills/datahub-ml-drift/`. This provides autonomous coding agents (Claude, Copilot, etc.) with the exact methodologies and commands necessary to execute drift detection and DataHub write-backs.
+---
 
-**Pull Request:** This skill has been submitted to the official DataHub repository: [datahub-project/datahub-skills#42](https://github.com/datahub-project/datahub-skills/pull/42).
+## Data Authenticity Note
 
-## Demo Video
-*(Demo Video link will be inserted here)*
+> **Important Note:** All model entities (`churn_model`, `fraud_model`), dataset entities (`raw_transactions`, `raw_payments`, `churn_features`, etc.), lineage relationships, training jobs, and `StructuredProperty` schemas are **real DataHub metadata entities** created and stored directly in DataHub. 
+>
+> The feature value rows in `data/baseline_features.csv`, `data/current_features.csv`, `data/fraud_baseline_features.csv`, and `data/fraud_current_features.csv` are **intentionally synthetic** and engineered to provide clear, deterministic demo signals (`churn_model` triggers a `HIGH` risk alert driven by `refund_rate`, while `fraud_model` provides a `LOW` risk, stable comparison baseline).
 
-## Examples
-See `examples/sample_incident_report.md` for a generated markdown document mimicking the exact content injected into DataHub.
+---
+
+## API Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/models` | Discovers and returns all registered `mlModel` entities from DataHub. |
+| `POST` | `/audit/{model_urn}` | Walks lineage and computes PSI & KS statistical drift across all upstream features. |
+| `POST` | `/writeback/{model_urn}` | Publishes structured properties and an incident document directly to DataHub. |
+
+---
+
+## Rehearsing the Demo
+
+Before each rehearsal run, reset DataHub to a clean demo state with a single command:
+
+```bash
+python scripts/reset_demo_state.py
+```
+
+This script:
+- Re-seeds both models (`churn_model`, `fraud_model`) with their original structured properties (UPSERT — no duplicates)
+- Deletes any previously-written incident report documents
+- Clears drift-related structured properties (`drift_psi_score`, `drift_risk_level`, `last_checked_timestamp`) from upstream dataset entities
+- Verifies no duplicate structured properties exist on either model
+
+Safe to run as many times as needed — every operation is idempotent.
+
+---
 
 ## License
 Apache 2.0 (See `LICENSE`)

@@ -51,6 +51,10 @@ class FeatureRiskResult(BaseModel):
     psi: float
     ks_pvalue: Optional[float] = None
     risk_level: str
+    baseline_distribution: List[float]
+    current_distribution: List[float]
+    null_rate: Optional[float] = None
+    recommendation: Optional[str] = None
 
 class ModelAuditReport(BaseModel):
     model_urn: str
@@ -161,7 +165,11 @@ def writeback_endpoint(model_urn: str, report: ModelAuditReport):
                     source_entity_urn=f.source_entity_urn,
                     psi=f.psi,
                     ks_pvalue=f.ks_pvalue,
-                    risk_level=f.risk_level
+                    risk_level=f.risk_level,
+                    baseline_distribution=f.baseline_distribution,
+                    current_distribution=f.current_distribution,
+                    null_rate=f.null_rate,
+                    recommendation=f.recommendation
                 ) for f in report.feature_results
             ],
             overall_risk=report.overall_risk,
