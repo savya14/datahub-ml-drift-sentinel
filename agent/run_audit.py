@@ -73,6 +73,16 @@ def run_audit(model_name: str) -> ModelAuditReport:
         ]
         baseline_filename = "fraud_baseline_features.csv"
         current_filename = "fraud_current_features.csv"
+    elif model_name == "pricing_model":
+        feature_dataset = "urn:li:dataset:(urn:li:dataPlatform:custom,pricing_features,PROD)"
+        target_urns = [
+            feature_dataset,
+            "urn:li:dataset:(urn:li:dataPlatform:custom,raw_product_catalog,PROD)",
+            "urn:li:dataset:(urn:li:dataPlatform:custom,raw_competitor_prices,PROD)",
+            "urn:li:dataset:(urn:li:dataPlatform:custom,raw_sales_history,PROD)",
+        ]
+        baseline_filename = "pricing_baseline_features.csv"
+        current_filename = "pricing_current_features.csv"
     else:
         feature_dataset = "urn:li:dataset:(urn:li:dataPlatform:custom,churn_features,PROD)"
         target_urns = [
@@ -109,7 +119,7 @@ def run_audit(model_name: str) -> ModelAuditReport:
     baseline_df = pd.read_csv(baseline_path)
     current_df = pd.read_csv(current_path)
 
-    ignore_cols = ["customer_id"]
+    ignore_cols = ["customer_id", "item_id"]
     cols_to_test = [c for c in baseline_df.columns if c not in ignore_cols]
 
     # 3. Run drift detection per feature

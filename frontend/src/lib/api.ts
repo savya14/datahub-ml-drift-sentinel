@@ -8,18 +8,32 @@ export async function listModels(): Promise<ModelAudit[]> {
   const data = await res.json();
   
   // Backend returns: [{ urn, name }]
-  // We map it to ModelAudit to satisfy the frontend Dashboard list.
-  return data.map((m: any) => ({
-    modelId: m.urn,
-    modelName: m.name,
-    modelUrn: m.urn,
-    overallRisk: "low", // Mismatched: backend /models doesn't return risk. Mocking for UI.
-    lastChecked: new Date().toISOString(),
-    lineage: { nodes: [], edges: [] },
-    featureDrifts: [],
-    rootCause: "",
-    writeBack: { status: "not_started" } as WriteBackState
+  // Check localStorage to see if an audit has been run for each model.
+  // If yes, query getModel() to get the real current risk level.
+  const models = await Promise.all(data.map(async (m: any) => {
+    const isAudited = localStorage.getItem(`audited_${m.urn}`) === 'true';
+    if (isAudited) {
+      try {
+        const fullModel = await getModel(m.urn);
+        if (fullModel) return fullModel;
+      } catch (e) {
+        console.error("Error fetching audited model", m.urn, e);
+      }
+    }
+
+    return {
+      modelId: m.urn,
+      modelName: m.name,
+      modelUrn: m.urn,
+      overallRisk: "low",
+      lastChecked: new Date().toISOString(),
+      lineage: { nodes: [], edges: [] },
+      featureDrifts: [],
+      rootCause: "",
+      writeBack: { status: "not_started" } as WriteBackState
+    };
   }));
+  return models;
 }
 
 export async function getModel(modelId: string): Promise<ModelAudit | undefined> {

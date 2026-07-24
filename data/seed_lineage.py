@@ -41,11 +41,21 @@ def main():
     fraud_model = builder.make_ml_model_urn('custom', 'fraud_model', 'PROD')
     fraud_training_flow = builder.make_data_flow_urn('custom', 'fraud_training_pipeline', 'PROD')
     fraud_training_job = builder.make_data_job_urn('custom', 'fraud_training_pipeline', 'train_fraud_model', 'PROD')
+
+    # Define URNs for pricing_model
+    raw_product_catalog = builder.make_dataset_urn('custom', 'raw_product_catalog', 'PROD')
+    raw_competitor_prices = builder.make_dataset_urn('custom', 'raw_competitor_prices', 'PROD')
+    raw_sales_history = builder.make_dataset_urn('custom', 'raw_sales_history', 'PROD')
+    pricing_features = builder.make_dataset_urn('custom', 'pricing_features', 'PROD')
+    pricing_model = builder.make_ml_model_urn('custom', 'pricing_model', 'PROD')
+    pricing_training_flow = builder.make_data_flow_urn('custom', 'pricing_training_pipeline', 'PROD')
+    pricing_training_job = builder.make_data_job_urn('custom', 'pricing_training_pipeline', 'train_pricing_model', 'PROD')
     
     # 1. Create Datasets with basic properties
     all_datasets = [
         raw_transactions, raw_customer_profile, raw_support_tickets, churn_features,
-        raw_payments, raw_user_devices, raw_ip_blacklist, fraud_features
+        raw_payments, raw_user_devices, raw_ip_blacklist, fraud_features,
+        raw_product_catalog, raw_competitor_prices, raw_sales_history, pricing_features
     ]
     for urn in all_datasets:
         mcp = MetadataChangeProposalWrapper(
@@ -103,6 +113,16 @@ def main():
         ]
     )
     emitter.emit(MetadataChangeProposalWrapper(entityUrn=fraud_features, aspect=upstream_lineage_fraud))
+
+    # pricing_features lineage
+    upstream_lineage_pricing = UpstreamLineageClass(
+        upstreams=[
+            UpstreamClass(dataset=raw_product_catalog, type="TRANSFORMED", auditStamp=AuditStampClass(time=0, actor="urn:li:corpuser:datahub")),
+            UpstreamClass(dataset=raw_competitor_prices, type="TRANSFORMED", auditStamp=AuditStampClass(time=0, actor="urn:li:corpuser:datahub")),
+            UpstreamClass(dataset=raw_sales_history, type="TRANSFORMED", auditStamp=AuditStampClass(time=0, actor="urn:li:corpuser:datahub"))
+        ]
+    )
+    emitter.emit(MetadataChangeProposalWrapper(entityUrn=pricing_features, aspect=upstream_lineage_pricing))
     
     # 3. Create Training Pipelines (DataFlow and DataJob)
     # Churn pipeline
@@ -114,6 +134,11 @@ def main():
     emitter.emit(MetadataChangeProposalWrapper(entityUrn=fraud_training_flow, aspect=DataFlowInfoClass(name="Fraud Training Pipeline", customProperties={})))
     emitter.emit(MetadataChangeProposalWrapper(entityUrn=fraud_training_job, aspect=DataJobInfoClass(name="Train Fraud Model", type="COMMAND", customProperties={})))
     emitter.emit(MetadataChangeProposalWrapper(entityUrn=fraud_training_job, aspect=DataJobInputOutputClass(inputDatasets=[fraud_features], outputDatasets=[])))
+
+    # Pricing pipeline
+    emitter.emit(MetadataChangeProposalWrapper(entityUrn=pricing_training_flow, aspect=DataFlowInfoClass(name="Pricing Training Pipeline", customProperties={})))
+    emitter.emit(MetadataChangeProposalWrapper(entityUrn=pricing_training_job, aspect=DataJobInfoClass(name="Train Pricing Model", type="COMMAND", customProperties={})))
+    emitter.emit(MetadataChangeProposalWrapper(entityUrn=pricing_training_job, aspect=DataJobInputOutputClass(inputDatasets=[pricing_features], outputDatasets=[])))
 
     # 4. Create ML Models and link to Training Jobs
     # Churn model
@@ -159,8 +184,30 @@ def main():
             ]
         )
     ))
-    
-    print("Successfully seeded lineage graph with churn_model and fraud_model!")
+
+    # Pricing model
+    emitter.emit(MetadataChangeProposalWrapper(
+        entityUrn=pricing_model,
+        aspect=MLModelPropertiesClass(date=0, trainingJobs=[pricing_training_job], description="ML Model for dynamic product pricing", customProperties={})
+    ))
+    emitter.emit(MetadataChangeProposalWrapper(
+        entityUrn=pricing_model,
+        aspect=StructuredPropertiesClass(
+            properties=[
+                StructuredPropertyValueAssignmentClass(propertyUrn="urn:li:structuredProperty:ml_model_owner", values=["pricing-ds-team"]),
+                StructuredPropertyValueAssignmentClass(propertyUrn="urn:li:structuredProperty:ml_model_version", values=["v3.0.2"]),
+                StructuredPropertyValueAssignmentClass(propertyUrn="urn:li:structuredProperty:ml_model_training_date", values=["2024-05-10"]),
+                StructuredPropertyValueAssignmentClass(propertyUrn="urn:li:structuredProperty:ml_model_deployment_env", values=["production-us-west-2"]),
+                StructuredPropertyValueAssignmentClass(propertyUrn="urn:li:structuredProperty:ml_model_framework", values=["lightgbm 4.1"]),
+                StructuredPropertyValueAssignmentClass(propertyUrn="urn:li:structuredProperty:ml_model_baseline_accuracy", values=["0.89"]),
+                StructuredPropertyValueAssignmentClass(propertyUrn="urn:li:structuredProperty:ml_model_business_domain", values=["Pricing Strategy"]),
+                StructuredPropertyValueAssignmentClass(propertyUrn="urn:li:structuredProperty:ml_model_predictions_per_day", values=["800000"]),
+                StructuredPropertyValueAssignmentClass(propertyUrn="urn:li:structuredProperty:ml_model_status", values=["Healthy"]),
+            ]
+        )
+    ))
+
+    print("Successfully seeded lineage graph with churn_model, fraud_model, and pricing_model!")
 
 if __name__ == "__main__":
     main()

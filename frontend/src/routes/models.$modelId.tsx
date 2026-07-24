@@ -210,6 +210,7 @@ function LoadedDetail({ model }: { model: ModelAudit }) {
         setActiveNodeId(null);
         setAuditActive(false);
         setHasRun(true);
+        localStorage.setItem(`audited_${model.modelUrn}`, 'true');
       }, order.length * step + 100),
     );
   }, [order, model]);

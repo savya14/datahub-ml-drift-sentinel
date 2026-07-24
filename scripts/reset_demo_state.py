@@ -47,7 +47,7 @@ GMS_TOKEN = os.environ.get("DATAHUB_GMS_TOKEN")
 INCIDENT_TITLE_PREFIX = "Drift Incident Report"
 
 # Model names
-MODEL_NAMES = ["churn_model", "fraud_model"]
+MODEL_NAMES = ["churn_model", "fraud_model", "pricing_model"]
 
 # Dataset entities that may have drift-writeback structured properties
 DATASET_ENTITIES = [
@@ -55,12 +55,16 @@ DATASET_ENTITIES = [
     for name in [
         "churn_features",
         "fraud_features",
+        "pricing_features",
         "raw_transactions",
         "raw_customer_profile",
         "raw_support_tickets",
         "raw_payments",
         "raw_user_devices",
         "raw_ip_blacklist",
+        "raw_product_catalog",
+        "raw_competitor_prices",
+        "raw_sales_history",
     ]
 ]
 
