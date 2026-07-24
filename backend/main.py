@@ -14,6 +14,7 @@ from agent.run_audit import run_audit
 from agent.writeback import writeback
 from agent.run_audit import ModelAuditReport as AgentModelAuditReport
 from agent.run_audit import FeatureRiskResult as AgentFeatureRiskResult
+from backend.cache import load_cache, save_cache
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -67,6 +68,7 @@ class ModelAuditReport(BaseModel):
 class ModelOption(BaseModel):
     urn: str
     name: str
+    last_audit: Optional[dict] = None
 
 # ---------------------------------------------------------------------------
 # API Endpoints
@@ -99,6 +101,7 @@ def get_models():
             }
         ''', {'input': {'type': 'MLMODEL', 'query': '*', 'start': 0, 'count': 50}})
         
+        cache = load_cache()
         models = []
         search_results = results.get("search", {}).get("searchResults", [])
         for res in search_results:
@@ -116,7 +119,7 @@ def get_models():
                     name = urn
             
             if urn and name:
-                models.append(ModelOption(urn=urn, name=name))
+                models.append(ModelOption(urn=urn, name=name, last_audit=cache.get(urn)))
                 
         return models
         
@@ -140,6 +143,12 @@ def run_audit_endpoint(model_urn: str):
         
         # run the actual agent
         agent_report = run_audit(model_name)
+        
+        # update cache
+        cache = load_cache()
+        import dataclasses
+        cache[model_urn] = dataclasses.asdict(agent_report)
+        save_cache(cache)
         
         # The agent returns a dataclass. We can return it directly, FastAPI handles dataclasses natively,
         # but to be totally safe we map it to our Pydantic model.

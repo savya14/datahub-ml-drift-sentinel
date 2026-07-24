@@ -215,6 +215,13 @@ def main():
 
     ok = verify_no_duplicates()
 
+    try:
+        from backend.cache import clear_cache
+        clear_cache()
+        print("  ✓ Cleared backend audit cache.")
+    except Exception as e:
+        print(f"  · Could not clear backend cache: {e}")
+
     print("\n" + "=" * 60)
     if ok:
         print("  ✓ Demo state reset complete — ready for rehearsal.")

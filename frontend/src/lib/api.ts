@@ -7,33 +7,44 @@ export async function listModels(): Promise<ModelAudit[]> {
   if (!res.ok) throw new Error("Failed to fetch models from backend");
   const data = await res.json();
   
-  // Backend returns: [{ urn, name }]
-  // Check localStorage to see if an audit has been run for each model.
-  // If yes, query getModel() to get the real current risk level.
-  const models = await Promise.all(data.map(async (m: any) => {
-    const isAudited = localStorage.getItem(`audited_${m.urn}`) === 'true';
-    if (isAudited) {
-      try {
-        const fullModel = await getModel(m.urn);
-        if (fullModel) return fullModel;
-      } catch (e) {
-        console.error("Error fetching audited model", m.urn, e);
-      }
+  // Backend returns: [{ urn, name, last_audit? }]
+  return data.map((m: any) => {
+    let featureDrifts = [];
+    let overallRisk = "low";
+    let lastChecked = new Date().toISOString();
+    let rootCause = "";
+
+    if (m.last_audit) {
+      featureDrifts = m.last_audit.feature_results.map((f: any) => ({
+        featureName: f.feature_name,
+        featureType: "numeric",
+        psi: f.psi,
+        ksStatistic: undefined,
+        ksPValue: f.ks_pvalue,
+        riskLevel: f.risk_level.toLowerCase(),
+        sourceTable: f.source_entity_urn,
+        baselineDistribution: f.baseline_distribution ? f.baseline_distribution.map((x: number) => Math.round(x * 100)) : [],
+        currentDistribution: f.current_distribution ? f.current_distribution.map((x: number) => Math.round(x * 100)) : [],
+        nullRate: f.null_rate,
+        recommendation: f.recommendation
+      }));
+      overallRisk = m.last_audit.overall_risk.toLowerCase();
+      lastChecked = m.last_audit.timestamp;
+      rootCause = `Primary drift detected in ${m.last_audit.top_contributing_feature}.`;
     }
 
     return {
       modelId: m.urn,
       modelName: m.name,
       modelUrn: m.urn,
-      overallRisk: "low",
-      lastChecked: new Date().toISOString(),
+      overallRisk,
+      lastChecked,
       lineage: { nodes: [], edges: [] },
-      featureDrifts: [],
-      rootCause: "",
+      featureDrifts,
+      rootCause,
       writeBack: { status: "not_started" } as WriteBackState
     };
-  }));
-  return models;
+  });
 }
 
 export async function getModel(modelId: string): Promise<ModelAudit | undefined> {
