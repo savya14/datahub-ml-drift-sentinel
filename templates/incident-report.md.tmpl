@@ -2,7 +2,7 @@
 
 ## 1. Executive Summary
 
-An automated drift audit detected **{{ overall_risk }}** risk for model `{{ model_name }}`. 
+An automated governance audit established **{{ overall_risk }}** risk evidence for model `{{ model_name }}`. 
 This indicates that the statistical distribution of the live data feeding the model has shifted compared to the baseline used during training.
 
 ### Impact & Urgency
@@ -12,18 +12,18 @@ This indicates that the statistical distribution of the live data feeding the mo
 - **Reliability Note**: Predictions from this model may be less reliable until retrained.
 {% else %}- **Urgency**: Monitor
 {% endif %}
-## 2. Root Cause
+## 2. Root Cause Evidence
 
 The primary driver for this alert is **{{ top_contributing_feature }}**. 
-This feature exhibited the highest degree of drift among all monitored inputs.
+This feature exhibited the highest degree of statistical drift evidence among all monitored inputs.
 
 ## 3. Governance Evidence Trail
 
-We compute statistical metrics across DataHub upstream lineage to form a verifiable evidence trail:
-- **PSI (Population Stability Index)**: Measures the overall shift in distribution. A PSI > 0.25 indicates significant drift, while 0.1 to 0.25 indicates moderate drift.
-- **KS p-value (Kolmogorov-Smirnov)**: Tests whether the baseline and current samples are drawn from identical distributions. A p-value < 0.05 confirms a statistically significant shift.
+We compute statistical metrics across DataHub upstream lineage to form a verifiable governance evidence trail:
+- **PSI (Population Stability Index)**: Measures the overall shift in distribution. A PSI > 0.25 indicates significant drift evidence, while 0.1 to 0.25 indicates moderate drift evidence.
+- **KS p-value (Kolmogorov-Smirnov)**: Tests whether the baseline and current samples are drawn from identical distributions. A p-value < 0.05 confirms a statistically significant evidence of shift.
 
-In this audit, {{ high_count }} feature(s) flagged HIGH risk, {{ medium_count }} flagged MEDIUM risk, and {{ low_count }} flagged LOW risk.
+In this audit, {{ high_count }} feature(s) provided HIGH risk evidence, {{ medium_count }} provided MEDIUM risk evidence, and {{ low_count }} provided LOW risk evidence.
 
 ## 4. Affected Features Evidence Table
 
@@ -33,7 +33,7 @@ In this audit, {{ high_count }} feature(s) flagged HIGH risk, {{ medium_count }}
 {% endfor %}
 ## 5. Recommended Governance Actions
 
-Based on deterministic rule evaluation of the feature statistics:
+Based on deterministic evaluation of the statistical evidence:
 {% for f in feature_results %}{% if f.recommendation and f.recommendation != "No action required" %}- **{{ f.feature_name }}**: {{ f.recommendation }}
 {% endif %}{% endfor %}
 ## 6. DataHub Governance Audit Trail Metadata
